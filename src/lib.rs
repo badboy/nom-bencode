@@ -9,17 +9,30 @@ use nom::IResult;
 #[derive(Debug,PartialEq)]
 pub enum Value {
     String(Vec<u8>),
-    Integer(u32),
+    Integer(i64),
     List(Vec<Value>),
     Dict(HashMap<Vec<u8>,Value>)
 }
 
-/// parse a u32
-fn number(i: &[u8]) -> IResult<&[u8], u32> {
+/// parse a u64
+fn number(i: &[u8]) -> IResult<&[u8], u64> {
     map_res!(i,
              nom::digit,
              |d| str::FromStr::from_str(str::from_utf8(d).unwrap()))
 }
+
+named!(inumber<i64>, chain!(
+        pre: opt!(tag!("-")) ~
+        n: number
+        ,
+        || {
+            match pre {
+                Some(_) => -(n as i64),
+                None    => n as i64,
+            }
+        }
+        )
+    );
 
 pub fn value(i: &[u8]) -> IResult<&[u8], Value> {
     alt!(i, string | integer | list | dict)
@@ -37,7 +50,7 @@ fn string(i: &[u8]) -> IResult<&[u8], Value> {
 
 fn integer(i: &[u8]) -> IResult<&[u8], Value> {
     let (i2, n) = try_parse!(i,
-                             delimited!(char!('i'), number, char!('e'))
+                             delimited!(char!('i'), inumber, char!('e'))
                             );
 
     IResult::Done(i2, Value::Integer(n))
@@ -99,7 +112,7 @@ mod tests {
         done(Value::String(x.to_vec()))
     }
 
-    fn done_integer(x: u32) -> ::nom::IResult<&'static [u8], Value> {
+    fn done_integer(x: i64) -> ::nom::IResult<&'static [u8], Value> {
         done(Value::Integer(x))
     }
 
@@ -122,6 +135,13 @@ mod tests {
     fn integers() {
         let res = 123;
         let data = "i123e".as_bytes();
+        assert_eq!(done_integer(res), integer(data));
+    }
+
+    #[test]
+    fn negative_integer() {
+        let res : i64 = -123;
+        let data = "i-123e".as_bytes();
         assert_eq!(done_integer(res), integer(data));
     }
 
